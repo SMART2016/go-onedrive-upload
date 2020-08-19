@@ -2,12 +2,12 @@ package onedrive
 
 import (
 	"fmt"
+	"go-onedrive-upload/fileutil"
 	http_local "go-onedrive-upload/graph/net/http"
 	"io/ioutil"
 	"log"
 	"net/http"
 	"net/url"
-	"os"
 )
 
 func GetRestoreService(c *http.Client) *RestoreService {
@@ -21,54 +21,77 @@ type RestoreService struct {
 	*http_local.OneDrive
 }
 
-// SimpleUpload allows you to provide the contents of a new file or update the
+// SimpleUploadToOriginalLoc allows you to provide the contents of a new file or update the
 // contents of an existing file in a single API call. This method only supports
 // files up to 4MB in size. For larger files use ResumableUpload().
 //@userId will be extracted as sent from the restore input xml
 //@bearerToken will be extracted as sent from the restore input xml
-//@parentFolder and @file will be extracted from the file hierarchy the needs to be restored
-func (rs *RestoreService) SimpleUploadToOriginalLoc(userId string, bearerToken string, conflictOption string, filePath string, file *os.File) (*http.Response, error) {
-	uploadPath := fmt.Sprintf("/users/%s/drive/root:/%s:/content", userId, filePath)
-	req, err := rs.NewRequest("PUT", uploadPath, getSimpleUploadHeader(bearerToken), file)
-	if err != nil {
-		return nil, err
+//@filePath will be extracted from the file hierarchy the needs to be restored
+//@fileInfo it is the file info struct that contains the actual file reference and the size_type
+func (rs *RestoreService) SimpleUploadToOriginalLoc(userId string, bearerToken string, conflictOption string, filePath string, fileInfo fileutil.FileInfo) (*http.Response, error) {
+	if fileInfo.SizeType == fileutil.SIZE_TYPE_LARGE {
+		//For Large file type use resummable onedrive upload API
+		return ressumableUpload(userId, bearerToken, conflictOption, filePath, fileInfo)
+	} else {
+		uploadPath := fmt.Sprintf("/users/%s/drive/root:/%s:/content", userId, filePath)
+		req, err := rs.NewRequest("PUT", uploadPath, getSimpleUploadHeader(bearerToken), fileInfo.FileData)
+		if err != nil {
+			return nil, err
+		}
+
+		//Handle query parameter for conflict resolution
+		//The different values for @microsoft.graph.conflictBehavior= rename|replace|fail
+		q := url.Values{}
+		q.Add("@microsoft.graph.conflictBehavior", conflictOption)
+		req.URL.RawQuery = q.Encode()
+
+		//Execute the request
+		resp, err := rs.Do(req)
+		if err != nil {
+			//Need to return a generic object from onedrive upload instead of response directly
+			return nil, err
+		}
+		return resp, nil
 	}
 
-	//Handle query parameter for conflict resolution
-	//The different values for @microsoft.graph.conflictBehavior= rename|replace|fail
-	q := url.Values{}
-	q.Add("@microsoft.graph.conflictBehavior", conflictOption)
-	req.URL.RawQuery = q.Encode()
-
-	//Execute the request
-	resp, err := rs.Do(req)
-	if err != nil {
-		//Need to return a generic object from onedrive upload instead of response directly
-		return nil, err
-	}
-	return resp, nil
 }
 
-func (rs *RestoreService) SimpleUploadToAlternateLoc(altUserId string, bearerToken string, conflictOption string, filePath string, file *os.File) (*http.Response, error) {
-	uploadPath := fmt.Sprintf("/users/%s/drive/root:/%s:/content", altUserId, filePath)
-	req, err := rs.NewRequest("PUT", uploadPath, getSimpleUploadHeader(bearerToken), file)
-	if err != nil {
-		return nil, err
-	}
+// SimpleUploadToAlternateLoc allows you to provide the contents of a new file or update the
+// contents of an existing file in a single API call. This method only supports
+// files up to 4MB in size. For larger files use ResumableUpload().
+//@userId will be extracted as sent from the restore input xml
+//@filePath will be extracted from the file hierarchy the needs to be restored
+//@fileInfo it is the file info struct that contains the actual file reference and the size_type
+func (rs *RestoreService) SimpleUploadToAlternateLoc(altUserId string, bearerToken string, conflictOption string, filePath string, fileInfo fileutil.FileInfo) (*http.Response, error) {
+	if fileInfo.SizeType == fileutil.SIZE_TYPE_LARGE {
+		//For Large file type use resummable onedrive upload API
+		return ressumableUpload(altUserId, bearerToken, conflictOption, filePath, fileInfo)
+	} else {
 
-	//Handle query parameter for conflict resolution
-	//The different values for @microsoft.graph.conflictBehavior= rename|replace|fail
-	q := url.Values{}
-	q.Add("@microsoft.graph.conflictBehavior", conflictOption)
-	req.URL.RawQuery = q.Encode()
+		uploadPath := fmt.Sprintf("/users/%s/drive/root:/%s:/content", altUserId, filePath)
+		req, err := rs.NewRequest("PUT", uploadPath, getSimpleUploadHeader(bearerToken), fileInfo.FileData)
+		if err != nil {
+			return nil, err
+		}
 
-	//Execute the request
-	resp, err := rs.Do(req)
-	if err != nil {
-		//Need to return a generic object from onedrive upload instead of response directly
-		return nil, err
+		//Handle query parameter for conflict resolution
+		//The different values for @microsoft.graph.conflictBehavior= rename|replace|fail
+		q := url.Values{}
+		q.Add("@microsoft.graph.conflictBehavior", conflictOption)
+		req.URL.RawQuery = q.Encode()
+
+		//Execute the request
+		resp, err := rs.Do(req)
+		if err != nil {
+			//Need to return a generic object from onedrive upload instead of response directly
+			return nil, err
+		}
+		return resp, nil
 	}
-	return resp, nil
+}
+
+func ressumableUpload(altUserId string, bearerToken string, conflictOption string, filePath string, fileInfo fileutil.FileInfo) (*http.Response, error) {
+	return nil, nil
 }
 
 //Get response as string

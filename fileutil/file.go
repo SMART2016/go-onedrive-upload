@@ -9,18 +9,31 @@ import (
 
 const (
 	max_file_size_in_bytes = 4 * (2 << 20)
+	SIZE_TYPE_LARGE        = "LARGE"
+	SIZE_TYPE_SMALL        = "SMALL"
 )
 
-func GetAllUploadItemsFrmSource(sourcePath string) (map[string]*os.File, error) {
-	fileMap := make(map[string]*os.File)
+type FileInfo struct {
+	FileData *os.File
+	SizeType string
+}
+
+func GetAllUploadItemsFrmSource(sourcePath string) (map[string]FileInfo, error) {
+	fileMap := make(map[string]FileInfo)
 	err := filepath.Walk(sourcePath,
 		func(path string, info os.FileInfo, err error) error {
 			if err != nil {
 				return err
 			}
 			if !info.IsDir() {
+				//Create FileInfo object
+				fileInfo := FileInfo{
+					SizeType: SIZE_TYPE_SMALL,
+				}
 				//If file size is greater than 4 mb return error
+				//for now until there is a support for Large file upload.
 				if info.Size() > max_file_size_in_bytes {
+					fileInfo.SizeType = SIZE_TYPE_LARGE
 					return fmt.Errorf("File %s size  %d > 4Mb is not allowed for simple Restore", info.Name(), info.Size())
 				}
 				fileItem, err := os.Open(path)
@@ -29,7 +42,8 @@ func GetAllUploadItemsFrmSource(sourcePath string) (map[string]*os.File, error) 
 				}
 				//parentDir := filepath.Dir(path)
 				//fmt.Println(parentDir)
-				fileMap[path] = fileItem
+				fileInfo.FileData = fileItem
+				fileMap[path] = fileInfo
 			}
 			return nil
 		})

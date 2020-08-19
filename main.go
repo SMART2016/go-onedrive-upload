@@ -6,7 +6,6 @@ import (
 	"go-onedrive-upload/fileutil"
 	"log"
 	"net/http"
-	"os"
 )
 
 const (
@@ -21,22 +20,22 @@ func main() {
 	restoreSrvc := onedrive.GetRestoreService(http.DefaultClient)
 
 	//Get the list of files that needs to be restore with the actual backed up path.
-	fileItemsToUpload, err := fileutil.GetAllUploadItemsFrmSource("./fileutil")
+	fileInfoToUpload, err := fileutil.GetAllUploadItemsFrmSource("./fileutil")
 	if err != nil {
 		log.Fatalf("Failed to Restore :%v", err)
 	}
 
 	if restoreOption == "alt" {
-		restoreToAltLoc(restoreSrvc, fileItemsToUpload)
+		restoreToAltLoc(restoreSrvc, fileInfoToUpload)
 	} else {
-		restore(restoreSrvc, fileItemsToUpload)
+		restore(restoreSrvc, fileInfoToUpload)
 	}
 }
 
 //Restore to original location
-func restore(restoreSrvc *onedrive.RestoreService, filesToRestore map[string]*os.File) {
-	for filePath, fileItem := range filesToRestore {
-		respStr, err := restoreSrvc.SimpleUploadToAlternateLoc(user_id, bearer_token, "rename", filePath, fileItem)
+func restore(restoreSrvc *onedrive.RestoreService, filesToRestore map[string]fileutil.FileInfo) {
+	for filePath, fileInfo := range filesToRestore {
+		respStr, err := restoreSrvc.SimpleUploadToOriginalLoc(user_id, bearer_token, "rename", filePath, fileInfo)
 		if err != nil {
 			log.Fatalf("Failed to Restore :%v", err)
 			break
@@ -46,7 +45,7 @@ func restore(restoreSrvc *onedrive.RestoreService, filesToRestore map[string]*os
 }
 
 //Restore to Alternate location
-func restoreToAltLoc(restoreSrvc *onedrive.RestoreService, filesToRestore map[string]*os.File) {
+func restoreToAltLoc(restoreSrvc *onedrive.RestoreService, filesToRestore map[string]fileutil.FileInfo) {
 	rootFolder := fileutil.GetAlternateRootFolder()
 	for filePath, fileItem := range filesToRestore {
 		rootFilePath := fmt.Sprintf("%s/%s", rootFolder, filePath)
