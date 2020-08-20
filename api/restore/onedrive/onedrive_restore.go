@@ -10,6 +10,10 @@ import (
 	"net/url"
 )
 
+const (
+	simple_upload_path = "/users/%s/drive/root:/%s:/content"
+)
+
 func GetRestoreService(c *http.Client) *RestoreService {
 	return &RestoreService{
 		http_local.NewOneDriveClient(c, false),
@@ -31,9 +35,9 @@ type RestoreService struct {
 func (rs *RestoreService) SimpleUploadToOriginalLoc(userId string, bearerToken string, conflictOption string, filePath string, fileInfo fileutil.FileInfo) (*http.Response, error) {
 	if fileInfo.SizeType == fileutil.SIZE_TYPE_LARGE {
 		//For Large file type use resummable onedrive upload API
-		return ressumableUpload(userId, bearerToken, conflictOption, filePath, fileInfo)
+		return rs.ressumableUpload(userId, bearerToken, conflictOption, filePath, fileInfo)
 	} else {
-		uploadPath := fmt.Sprintf("/users/%s/drive/root:/%s:/content", userId, filePath)
+		uploadPath := fmt.Sprintf(simple_upload_path, userId, filePath)
 		req, err := rs.NewRequest("PUT", uploadPath, getSimpleUploadHeader(bearerToken), fileInfo.FileData)
 		if err != nil {
 			return nil, err
@@ -65,10 +69,10 @@ func (rs *RestoreService) SimpleUploadToOriginalLoc(userId string, bearerToken s
 func (rs *RestoreService) SimpleUploadToAlternateLoc(altUserId string, bearerToken string, conflictOption string, filePath string, fileInfo fileutil.FileInfo) (*http.Response, error) {
 	if fileInfo.SizeType == fileutil.SIZE_TYPE_LARGE {
 		//For Large file type use resummable onedrive upload API
-		return ressumableUpload(altUserId, bearerToken, conflictOption, filePath, fileInfo)
+		return rs.ressumableUpload(altUserId, bearerToken, conflictOption, filePath, fileInfo)
 	} else {
 
-		uploadPath := fmt.Sprintf("/users/%s/drive/root:/%s:/content", altUserId, filePath)
+		uploadPath := fmt.Sprintf(simple_upload_path, altUserId, filePath)
 		req, err := rs.NewRequest("PUT", uploadPath, getSimpleUploadHeader(bearerToken), fileInfo.FileData)
 		if err != nil {
 			return nil, err
@@ -88,10 +92,6 @@ func (rs *RestoreService) SimpleUploadToAlternateLoc(altUserId string, bearerTok
 		}
 		return resp, nil
 	}
-}
-
-func ressumableUpload(altUserId string, bearerToken string, conflictOption string, filePath string, fileInfo fileutil.FileInfo) (*http.Response, error) {
-	return nil, nil
 }
 
 //Get response as string
