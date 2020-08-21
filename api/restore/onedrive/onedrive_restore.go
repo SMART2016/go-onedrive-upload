@@ -32,7 +32,7 @@ type RestoreService struct {
 //@bearerToken will be extracted as sent from the restore input xml
 //@filePath will be extracted from the file hierarchy the needs to be restored
 //@fileInfo it is the file info struct that contains the actual file reference and the size_type
-func (rs *RestoreService) SimpleUploadToOriginalLoc(userId string, bearerToken string, conflictOption string, filePath string, fileInfo fileutil.FileInfo) (*http.Response, error) {
+func (rs *RestoreService) SimpleUploadToOriginalLoc(userId string, bearerToken string, conflictOption string, filePath string, fileInfo fileutil.FileInfo) (interface{}, error) {
 	if fileInfo.SizeType == fileutil.SIZE_TYPE_LARGE {
 		//For Large file type use resummable onedrive upload API
 		fmt.Printf("\nInside Large File Processing: %s", filePath)
@@ -67,7 +67,7 @@ func (rs *RestoreService) SimpleUploadToOriginalLoc(userId string, bearerToken s
 //@userId will be extracted as sent from the restore input xml
 //@filePath will be extracted from the file hierarchy the needs to be restored
 //@fileInfo it is the file info struct that contains the actual file reference and the size_type
-func (rs *RestoreService) SimpleUploadToAlternateLoc(altUserId string, bearerToken string, conflictOption string, filePath string, fileInfo fileutil.FileInfo) (*http.Response, error) {
+func (rs *RestoreService) SimpleUploadToAlternateLoc(altUserId string, bearerToken string, conflictOption string, filePath string, fileInfo fileutil.FileInfo) (interface{}, error) {
 	if fileInfo.SizeType == fileutil.SIZE_TYPE_LARGE {
 		//For Large file type use resummable onedrive upload API
 		return rs.ressumableUpload(altUserId, bearerToken, conflictOption, filePath, fileInfo)

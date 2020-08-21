@@ -95,7 +95,7 @@ func GetFileOffsetStash(filePath string) ([]int64, error) {
 	//Based on the offsetMax generate the start offset list
 	var i int64
 	offsetLst := make([]int64, 0)
-	for i = 0; i <= offsetMax; i = i + default_chunk_size - 1 {
+	for i = 0; i <= offsetMax; i = i + default_chunk_size {
 		offsetLst = append(offsetLst, i)
 	}
 	return offsetLst, nil

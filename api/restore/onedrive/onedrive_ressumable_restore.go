@@ -12,7 +12,7 @@ const (
 	upload_url_key      = "uploadUrl"
 )
 
-func (rs *RestoreService) ressumableUpload(userId string, bearerToken string, conflictOption string, filePath string, fileInfo fileutil.FileInfo) (*http.Response, error) {
+func (rs *RestoreService) ressumableUpload(userId string, bearerToken string, conflictOption string, filePath string, fileInfo fileutil.FileInfo) ([]*http.Response, error) {
 	//1. Get ressumable upload session for the current file path
 	uploadSessionData, err := rs.getUploadSession(userId, bearerToken, conflictOption, filePath)
 	if err != nil {
@@ -29,7 +29,10 @@ func (rs *RestoreService) ressumableUpload(userId string, bearerToken string, co
 	}
 
 	//4. Loop over the file start offset list to read files in chunk and upload in onedrive
-	var uploadFinalResp *http.Response
+	var uploadFinalResp []*http.Response
+	//var wg sync.WaitGroup
+	//wg.Add(len(startOfsetLst))
+	//defer wg.Wait()
 	for i, sOffset := range startOfsetLst {
 
 		//4a. Get the bytes for the file based on the offset
@@ -37,12 +40,29 @@ func (rs *RestoreService) ressumableUpload(userId string, bearerToken string, co
 		if err != nil {
 			return nil, err
 		}
-		fmt.Println("Uploading Part --> ", i)
+		fmt.Printf("\nUploading Part --> %d --> offset: %d", i, sOffset)
 		//3b. make a call to the upload url with the file part based on the offset.
-		uploadFinalResp, err = rs.uploadFilePart(uploadUrl, filePath, bearerToken, filePartInBytes)
+		//go func(index int)(error){
+		resp, err := rs.uploadFilePart(uploadUrl, filePath, bearerToken, filePartInBytes)
 		if err != nil {
+			//wg.Done()
 			return nil, err
 		}
+		if resp.Body != nil {
+			defer resp.Body.Close()
+		}
+		respMap := make(map[string]interface{})
+		err = json.NewDecoder(resp.Body).Decode(&respMap)
+		if err != nil {
+			fmt.Println(err)
+		}
+		fmt.Printf("%+v", respMap)
+		uploadFinalResp = append(uploadFinalResp, resp)
+
+		//wg.Done()
+		//return nil
+		//}(i)
+
 	}
 	return uploadFinalResp, nil
 }
@@ -118,8 +138,8 @@ func getRessumableUploadHeader(fileSizeInBytes int64, accessToken string) map[st
 	return map[string]string{
 		"Content-Length": cLength,
 		"Content-Range":  cRange,
-		"Content-Type":   "application/octet-stream",
-		"Authorization":  bearerToken,
+		//"Content-Type":   "application/octet-stream",
+		"Authorization": bearerToken,
 	}
 }
 
