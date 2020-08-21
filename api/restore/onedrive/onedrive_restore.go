@@ -35,6 +35,7 @@ type RestoreService struct {
 func (rs *RestoreService) SimpleUploadToOriginalLoc(userId string, bearerToken string, conflictOption string, filePath string, fileInfo fileutil.FileInfo) (*http.Response, error) {
 	if fileInfo.SizeType == fileutil.SIZE_TYPE_LARGE {
 		//For Large file type use resummable onedrive upload API
+		fmt.Printf("\nInside Large File Processing: %s", filePath)
 		return rs.ressumableUpload(userId, bearerToken, conflictOption, filePath, fileInfo)
 	} else {
 		uploadPath := fmt.Sprintf(simple_upload_path, userId, filePath)

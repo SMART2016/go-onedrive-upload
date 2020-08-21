@@ -4,8 +4,10 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"go-onedrive-upload/fileutil"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 )
 
@@ -43,27 +45,65 @@ func createRequestBody(body interface{}) (io.ReadWriter, error) {
 	return buf, nil
 }
 
-//Converts the input in byte buffer which is the expected type for file upload api.
-//Expects input as a reference type os.File
-func getRequestBodyForFileItem(file interface{}) (*bytes.Buffer, error) {
-	if _, ok := file.(*os.File); !ok {
-		return nil, fmt.Errorf("Invalid type expected type: *os.File")
+func getRequestBody(body interface{}) (io.ReadWriter, error) {
+	var buf io.ReadWriter
+
+	switch body.(type) {
+	case string:
+		if body != nil {
+			buf = new(bytes.Buffer)
+			err := json.NewEncoder(buf).Encode(body)
+			if err != nil {
+				return nil, err
+			}
+		}
+		break
+	case []byte:
+		buf = bytes.NewBuffer(body.([]byte))
+		break
+	case *os.File:
+		//file := &bytes.Buffer{}
+		//_, err := io.Copy(file, body.(*os.File))
+		//if err != nil {
+		//	return nil, err
+		//}
+		bytesData, err := fileutil.ReadFile(body.(*os.File))
+		if err != nil {
+			return nil, err
+		}
+		buf = bytes.NewBuffer(bytesData)
+		break
 	}
-	body := &bytes.Buffer{}
-	_, err := io.Copy(body, file.(*os.File))
+
+	return buf, nil
+}
+
+func isValidUrl(uri string) bool {
+	_, err := url.ParseRequestURI(uri)
 	if err != nil {
-		return nil, err
+		return false
 	}
-	return body, nil
+
+	u, err := url.Parse(uri)
+	if err != nil || u.Scheme == "" || u.Host == "" {
+		return false
+	}
+
+	return true
 }
 
 // Generate request
 func (od *OneDrive) NewRequest(method, uri string, requestHeaders map[string]string, body interface{}) (*http.Request, error) {
-	reqBody, err := getRequestBodyForFileItem(body)
+	reqBody, err := getRequestBody(body)
 	if err != nil {
 		return nil, fmt.Errorf("Unable to parse the file into Bytes  reason: %v", err)
 	}
-	req, err := http.NewRequest(method, od.BaseURL+uri, reqBody)
+	var req *http.Request
+	if isValidUrl(uri) {
+		req, err = http.NewRequest(method, uri, reqBody)
+	} else {
+		req, err = http.NewRequest(method, od.BaseURL+uri, reqBody)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -87,7 +127,7 @@ func (od *OneDrive) Do(req *http.Request) (*http.Response, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	//defer resp.Body.Close()
 
 	if resp.StatusCode >= http.StatusBadRequest && resp.StatusCode <= statusInsufficientStorage {
 		newErr := new(Error)
