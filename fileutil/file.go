@@ -59,14 +59,24 @@ func GetAllUploadItemsFrmSource(sourcePath string) (map[string]FileInfo, error) 
 }
 
 //Returns the file in parts based on the provided offset
-func GetFilePartInBytes(filePath string, startingOffset int64) ([]byte, error) {
+func GetFilePartInBytes(filePath string, startingOffset int64, isLastChunk bool) ([]byte, error) {
 	file, err := os.Open(filePath)
 	defer file.Close()
 
 	if err != nil {
 		return nil, err
 	}
-	buffer := make([]byte, default_chunk_size)
+	var buffer []byte
+	if isLastChunk {
+		lastChunkSize, err := GetLatsChunkSizeInBytes(filePath)
+		if err != nil {
+			return nil, err
+		}
+		buffer = make([]byte, lastChunkSize)
+	} else {
+		buffer = make([]byte, default_chunk_size)
+	}
+
 	_, err = file.ReadAt(buffer, startingOffset)
 	if err != nil {
 		if err != io.EOF {
@@ -118,6 +128,23 @@ func GetFileSize(filePath string) (int64, error) {
 	return fSize, nil
 }
 
+//return the last chunk size based on modulus with the file size with the default chunk size.
+//If the modulus is 0 then that means the file size is properly divisible by default chunk
+//size and so return the default chunk size in that case.
+func GetLatsChunkSizeInBytes(filePath string) (int64, error) {
+	fSize, err := GetFileSize(filePath)
+	if err != nil {
+		return -1, err
+	}
+	var lastChunkSize int64
+	chunkSize := (fSize % default_chunk_size)
+	if chunkSize == 0 {
+		lastChunkSize = default_chunk_size
+	} else {
+		lastChunkSize = chunkSize - 1
+	}
+	return lastChunkSize, nil
+}
 func GetAlternateRootFolder() string {
 	dt := time.Now()
 	//restore_YYYYMMDD_hhmmssff

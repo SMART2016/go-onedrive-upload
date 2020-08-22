@@ -1,6 +1,7 @@
 package onedrive
 
 import (
+	"encoding/json"
 	"fmt"
 	"go-onedrive-upload/fileutil"
 	http_local "go-onedrive-upload/graph/net/http"
@@ -35,7 +36,7 @@ type RestoreService struct {
 func (rs *RestoreService) SimpleUploadToOriginalLoc(userId string, bearerToken string, conflictOption string, filePath string, fileInfo fileutil.FileInfo) (interface{}, error) {
 	if fileInfo.SizeType == fileutil.SIZE_TYPE_LARGE {
 		//For Large file type use resummable onedrive upload API
-		fmt.Printf("\nInside Large File Processing: %s", filePath)
+		fmt.Printf("\nProcessing Large File: %s", filePath)
 		return rs.ressumableUpload(userId, bearerToken, conflictOption, filePath, fileInfo)
 	} else {
 		uploadPath := fmt.Sprintf(simple_upload_path, userId, filePath)
@@ -56,7 +57,16 @@ func (rs *RestoreService) SimpleUploadToOriginalLoc(userId string, bearerToken s
 			//Need to return a generic object from onedrive upload instead of response directly
 			return nil, err
 		}
-		return resp, nil
+		if resp.Body != nil {
+			defer resp.Body.Close()
+		}
+		//Convert to simple map
+		respMap := make(map[string]interface{})
+		err = json.NewDecoder(resp.Body).Decode(&respMap)
+		if err != nil {
+			return nil, err
+		}
+		return respMap, nil
 	}
 
 }
@@ -91,7 +101,16 @@ func (rs *RestoreService) SimpleUploadToAlternateLoc(altUserId string, bearerTok
 			//Need to return a generic object from onedrive upload instead of response directly
 			return nil, err
 		}
-		return resp, nil
+		if resp.Body != nil {
+			defer resp.Body.Close()
+		}
+		//Convert to simple map
+		respMap := make(map[string]interface{})
+		err = json.NewDecoder(resp.Body).Decode(&respMap)
+		if err != nil {
+			return nil, err
+		}
+		return respMap, nil
 	}
 }
 

@@ -12,7 +12,7 @@ const (
 	upload_url_key      = "uploadUrl"
 )
 
-func (rs *RestoreService) ressumableUpload(userId string, bearerToken string, conflictOption string, filePath string, fileInfo fileutil.FileInfo) ([]*http.Response, error) {
+func (rs *RestoreService) ressumableUpload(userId string, bearerToken string, conflictOption string, filePath string, fileInfo fileutil.FileInfo) ([]map[string]interface{}, error) {
 	//1. Get ressumable upload session for the current file path
 	uploadSessionData, err := rs.getUploadSession(userId, bearerToken, conflictOption, filePath)
 	if err != nil {
@@ -29,42 +29,37 @@ func (rs *RestoreService) ressumableUpload(userId string, bearerToken string, co
 	}
 
 	//4. Loop over the file start offset list to read files in chunk and upload in onedrive
-	var uploadFinalResp []*http.Response
-	//var wg sync.WaitGroup
-	//wg.Add(len(startOfsetLst))
-	//defer wg.Wait()
+	var uploadResp []map[string]interface{}
+	lastChunkIndex := len(startOfsetLst) - 1
+	var isLastChunk bool
 	for i, sOffset := range startOfsetLst {
-
+		if i == lastChunkIndex {
+			isLastChunk = true
+		}
 		//4a. Get the bytes for the file based on the offset
-		filePartInBytes, err := fileutil.GetFilePartInBytes(filePath, sOffset)
+		filePartInBytes, err := fileutil.GetFilePartInBytes(filePath, sOffset, isLastChunk)
 		if err != nil {
 			return nil, err
 		}
 		fmt.Printf("\nUploading Part --> %d --> offset: %d", i, sOffset)
 		//3b. make a call to the upload url with the file part based on the offset.
-		//go func(index int)(error){
-		resp, err := rs.uploadFilePart(uploadUrl, filePath, bearerToken, filePartInBytes)
+		resp, err := rs.uploadFilePart(uploadUrl, filePath, bearerToken, filePartInBytes, sOffset, isLastChunk)
+
 		if err != nil {
-			//wg.Done()
 			return nil, err
-		}
-		if resp.Body != nil {
-			defer resp.Body.Close()
 		}
 		respMap := make(map[string]interface{})
 		err = json.NewDecoder(resp.Body).Decode(&respMap)
 		if err != nil {
 			fmt.Println(err)
 		}
-		fmt.Printf("%+v", respMap)
-		uploadFinalResp = append(uploadFinalResp, resp)
-
-		//wg.Done()
-		//return nil
-		//}(i)
-
+		if resp.Body != nil {
+			defer resp.Body.Close()
+		}
+		//fmt.Printf("%+v, status code: %s", respMap, resp.Status)
+		uploadResp = append(uploadResp, respMap)
 	}
-	return uploadFinalResp, nil
+	return uploadResp, nil
 }
 
 //Returns the restore session url for part file upload
@@ -98,15 +93,21 @@ func (rs *RestoreService) getUploadSession(userId string, bearerToken string, co
 }
 
 //Uploads the file part to Onedrive
-func (rs *RestoreService) uploadFilePart(uploadUrl string, filePath string, bearerToken string, filePart []byte) (*http.Response, error) {
+func (rs *RestoreService) uploadFilePart(uploadUrl string, filePath string, bearerToken string, filePart []byte, startOffset int64, isLastPart bool) (*http.Response, error) {
 	//This is required for Content-Range header key
 	fileSizeInBytes, err := fileutil.GetFileSize(filePath)
 	if err != nil {
 		return nil, err
 	}
 
+	//Fetch Last chunklength -- will be needed in Content_length header
+	lastChunkLength, err := fileutil.GetLatsChunkSizeInBytes(filePath)
+	if err != nil {
+		return nil, err
+	}
+
 	//Create upload part file request
-	req, err := rs.NewRequest("PUT", uploadUrl, getRessumableUploadHeader(fileSizeInBytes, bearerToken), filePart)
+	req, err := rs.NewRequest("PUT", uploadUrl, getRessumableUploadHeader(fileSizeInBytes, bearerToken, startOffset, isLastPart, lastChunkLength), filePart)
 	if err != nil {
 		return nil, err
 	}
@@ -131,15 +132,24 @@ func getRessumableUploadSessionHeader(accessToken string) map[string]string {
 }
 
 //Returns headers for ressumable actual upload as file parts
-func getRessumableUploadHeader(fileSizeInBytes int64, accessToken string) map[string]string {
-	cRange := fmt.Sprintf("bytes 0-%d/%d", fileutil.GetDefaultChunkSize()-1, fileSizeInBytes)
-	cLength := fmt.Sprintf("%d", fileutil.GetDefaultChunkSize())
+func getRessumableUploadHeader(fileSizeInBytes int64, accessToken string, startOffset int64, isLastChunk bool, lastChunkSize int64) map[string]string {
+	var cRange string
+	var cLength string
+
+	if isLastChunk {
+		cRange = fmt.Sprintf("bytes %d-%d/%d", startOffset, fileSizeInBytes-2, fileSizeInBytes-1)
+		cLength = fmt.Sprintf("%d", lastChunkSize)
+	} else {
+		cRange = fmt.Sprintf("bytes %d-%d/%d", startOffset, startOffset+fileutil.GetDefaultChunkSize()-1, fileSizeInBytes-1)
+		cLength = fmt.Sprintf("%d", fileutil.GetDefaultChunkSize())
+	}
+
+	fmt.Printf("\nCLength: %s , cRange: %s\n", cLength, cRange)
 	bearerToken := fmt.Sprintf("bearer %s", accessToken)
 	return map[string]string{
 		"Content-Length": cLength,
 		"Content-Range":  cRange,
-		//"Content-Type":   "application/octet-stream",
-		"Authorization": bearerToken,
+		"Authorization":  bearerToken,
 	}
 }
 
